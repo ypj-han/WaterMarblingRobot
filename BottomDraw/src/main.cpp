@@ -1,14 +1,17 @@
 #include <Arduino.h>
-#include <ESP32Servo.h>
 #include <math.h>
 
-Servo servo1;  // Left arm servo
-Servo servo2;  // Right arm servo  
-Servo servo3;  // Pen lift servo
+// PWM 参数设置
+const int freq = 50;  // 50Hz for servo
+const int resolution = 16; // 16 bit resolution
+// PWM channels
+const int pwmChannel1 = 0;
+const int pwmChannel2 = 1;
+const int pwmChannel3 = 2;
 
-const int SERVO1_PIN = 18;
-const int SERVO2_PIN = 19;
-const int SERVO3_PIN = 21;
+const int SERVO1_PIN = 13;
+const int SERVO2_PIN = 12;
+const int SERVO3_PIN = 14;
 
 const float L1 = 35.0;  // Left arm length (mm)
 const float L2 = 55.5;  // Right arm length (mm)
@@ -21,6 +24,15 @@ struct Point {
 struct Angles {
   float theta1, theta2, theta3;
 };
+
+// 将角度转换为 PWM 值（16位分辨率）
+uint32_t angleToPWM(int angle) {
+  // 舵机通常需要 0.5ms 到 2.5ms 的脉冲宽度
+  // 对于 50Hz，周期是 20ms (20000 微秒)
+  // 16位分辨率下，65536 对应 20ms
+  // 因此 0.5ms 对应 1638，2.5ms 对应 8192
+  return map(angle, 0, 180, 1638, 8192);
+}
 
 Angles calculateAngles(float x, float y) {
   Angles angles;
@@ -47,23 +59,28 @@ Angles calculateAngles(float x, float y) {
 
 void moveToPosition(float x, float y) {
   Angles angles = calculateAngles(x, y);
-  
+
   int servo1_angle = constrain(degrees(angles.theta1), 0, 180);
   int servo2_angle = constrain(degrees(angles.theta2), 0, 180);
-  
-  servo1.write(servo1_angle);
-  servo2.write(servo2_angle);
-  
+
+  uint32_t pwm1 = angleToPWM(servo1_angle);
+  uint32_t pwm2 = angleToPWM(servo2_angle);
+
+  ledcWrite(pwmChannel1, pwm1);
+  ledcWrite(pwmChannel2, pwm2);
+
   delay(20);
 }
 
 void penUp() {
-  servo3.write(90);
+  uint32_t pwm3 = angleToPWM(90);
+  ledcWrite(pwmChannel3, pwm3);
   delay(300);
 }
 
 void penDown() {
-  servo3.write(0);
+  uint32_t pwm3 = angleToPWM(0);
+  ledcWrite(pwmChannel3, pwm3);
   delay(300);
 }
 
@@ -98,29 +115,52 @@ void drawCircle(float centerX, float centerY, float radius, int steps = 36) {
 void setup() {
   Serial.begin(115200);
   
-  servo1.attach(SERVO1_PIN);
-  servo2.attach(SERVO2_PIN);
-  servo3.attach(SERVO3_PIN);
+  // 配置 LED PWM 功能
+  ledcSetup(pwmChannel1, freq, resolution);
+  ledcSetup(pwmChannel2, freq, resolution);
+  ledcSetup(pwmChannel3, freq, resolution);
   
-  penUp();
-  moveToPosition(0, 60);
+  // 将通道与对应的引脚连接
+  ledcAttachPin(SERVO1_PIN, pwmChannel1);
+  ledcAttachPin(SERVO2_PIN, pwmChannel2);
+  ledcAttachPin(SERVO3_PIN, pwmChannel3);
   
-  Serial.println("PlotClock initialized");
+  Serial.println("PWM Channels initialized");
+  
+  // 测试每个引脚是否能输出
+  Serial.println("Testing PWM output...");
+  
+  delay(2000);  // Wait for system to initialize
+  Serial.println("Setup complete");
 }
 
 void loop() {
-  drawLine(-20, 40, 20, 40);
-  delay(1000);
+  // 测试第一个舵机
+  Serial.println("Testing PWM 1...");
+  for (int angle = 0; angle <= 180; angle += 45) {
+    uint32_t pwm = angleToPWM(angle);
+    Serial.printf("Angle: %d, PWM: %d\n", angle, pwm);
+    ledcWrite(pwmChannel1, pwm);
+    delay(1000);
+  }
   
-  drawLine(20, 40, 20, 80);
-  delay(1000);
+  // 测试第二个舵机
+  Serial.println("Testing PWM 2...");
+  for (int angle = 0; angle <= 180; angle += 45) {
+    uint32_t pwm = angleToPWM(angle);
+    Serial.printf("Angle: %d, PWM: %d\n", angle, pwm);
+    ledcWrite(pwmChannel2, pwm);
+    delay(1000);
+  }
   
-  drawLine(20, 80, -20, 80);
-  delay(1000);
+  // 测试第三个舵机
+  Serial.println("Testing PWM 3...");
+  for (int angle = 0; angle <= 180; angle += 45) {
+    uint32_t pwm = angleToPWM(angle);
+    Serial.printf("Angle: %d, PWM: %d\n", angle, pwm);
+    ledcWrite(pwmChannel3, pwm);
+    delay(1000);
+  }
   
-  drawLine(-20, 80, -20, 40);
-  delay(1000);
-  
-  drawCircle(0, 60, 15);
-  delay(2000);
+  delay(3000);
 }
